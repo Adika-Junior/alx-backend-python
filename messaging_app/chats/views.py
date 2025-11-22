@@ -1,12 +1,16 @@
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django_filters.rest_framework import DjangoFilterBackend
 from .models import Conversation, Message, User
 from .serializers import (
     ConversationSerializer,
     ConversationListSerializer,
     MessageSerializer
 )
+from .permissions import IsParticipantOfConversation
+from .pagination import MessagePagination, ConversationPagination
+from .filters import MessageFilter, ConversationFilter
 
 
 class ConversationViewSet(viewsets.ModelViewSet):
@@ -21,7 +25,10 @@ class ConversationViewSet(viewsets.ModelViewSet):
     """
     queryset = Conversation.objects.all()
     serializer_class = ConversationSerializer
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    permission_classes = [IsParticipantOfConversation]
+    pagination_class = ConversationPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = ConversationFilter
     search_fields = ['participants__email', 'participants__first_name', 'participants__last_name']
     ordering_fields = ['created_at']
     ordering = ['-created_at']
@@ -33,12 +40,12 @@ class ConversationViewSet(viewsets.ModelViewSet):
         return ConversationSerializer
     
     def get_queryset(self):
-        """Optionally filter conversations by participant."""
+        """Filter conversations to only show those where the user is a participant."""
         queryset = Conversation.objects.all()
-        participant_id = self.request.query_params.get('participant', None)
         
-        if participant_id:
-            queryset = queryset.filter(participants__user_id=participant_id)
+        # Only show conversations where the authenticated user is a participant
+        if self.request.user and self.request.user.is_authenticated:
+            queryset = queryset.filter(participants__user_id=self.request.user.user_id).distinct()
         
         return queryset.prefetch_related('participants', 'messages__sender')
     
@@ -86,14 +93,25 @@ class MessageViewSet(viewsets.ModelViewSet):
     """
     queryset = Message.objects.all()
     serializer_class = MessageSerializer
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    permission_classes = [IsParticipantOfConversation]
+    pagination_class = MessagePagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = MessageFilter
     search_fields = ['message_body', 'sender__email', 'sender__first_name', 'sender__last_name']
     ordering_fields = ['sent_at', 'created_at']
     ordering = ['-sent_at']
     
     def get_queryset(self):
-        """Filter messages by conversation if provided via nested route or query param."""
+        """Filter messages by conversation if provided via nested route or query param.
+        Only show messages from conversations where the user is a participant.
+        """
         queryset = Message.objects.select_related('sender', 'conversation')
+        
+        # Only show messages from conversations where the authenticated user is a participant
+        if self.request.user and self.request.user.is_authenticated:
+            queryset = queryset.filter(
+                conversation__participants__user_id=self.request.user.user_id
+            ).distinct()
         
         # Handle nested route: conversations/{id}/messages/
         conversation_pk = self.kwargs.get('conversation_pk', None)
@@ -116,6 +134,12 @@ class MessageViewSet(viewsets.ModelViewSet):
         if conversation_pk:
             try:
                 conversation = Conversation.objects.get(conversation_id=conversation_pk)
+                # Verify user is a participant
+                if not conversation.participants.filter(user_id=request.user.user_id).exists():
+                    return Response(
+                        {'error': 'You are not a participant in this conversation'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
                 data['conversation'] = conversation.conversation_id
             except Conversation.DoesNotExist:
                 return Response(
@@ -123,16 +147,29 @@ class MessageViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_404_NOT_FOUND
                 )
         
-        # Set sender from request user if available and not provided in data
-        if hasattr(request, 'user') and request.user.is_authenticated and 'sender_id' not in data:
+        # Set sender from request user (always use authenticated user)
+        if request.user and request.user.is_authenticated:
             data['sender_id'] = request.user.user_id
-        
-        # Validate that sender_id is provided
-        if 'sender_id' not in data:
+        else:
             return Response(
-                {'error': 'sender_id is required'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': 'Authentication required'},
+                status=status.HTTP_401_UNAUTHORIZED
             )
+        
+        # Validate conversation access if conversation is provided in data
+        if 'conversation' in data and conversation_pk is None:
+            try:
+                conversation = Conversation.objects.get(conversation_id=data['conversation'])
+                if not conversation.participants.filter(user_id=request.user.user_id).exists():
+                    return Response(
+                        {'error': 'You are not a participant in this conversation'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            except Conversation.DoesNotExist:
+                return Response(
+                    {'error': 'Conversation not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
         
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
