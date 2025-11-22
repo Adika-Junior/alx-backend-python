@@ -43,6 +43,7 @@ class IsParticipantOfConversation(BasePermission):
         
         For conversations: User must be a participant
         For messages: User must be a participant in the message's conversation
+        Allows only participants to send (POST), view (GET), update (PUT, PATCH), and delete (DELETE) messages
         
         Args:
             request: The request object
@@ -60,11 +61,19 @@ class IsParticipantOfConversation(BasePermission):
         if isinstance(obj, Conversation):
             return obj.participants.filter(user_id=request.user.user_id).exists()
         
-        # Handle Message objects
+        # Handle Message objects - allow GET, PUT, PATCH, DELETE for participants
         if isinstance(obj, Message):
             conversation = obj.conversation
             # Check if user is a participant in the conversation
-            return conversation.participants.filter(user_id=request.user.user_id).exists()
+            # Allow PUT, PATCH, DELETE only for participants
+            is_participant = conversation.participants.filter(user_id=request.user.user_id).exists()
+            
+            # For PUT, PATCH, DELETE methods, require participant status
+            if request.method in ['PUT', 'PATCH', 'DELETE']:
+                return is_participant
+            
+            # For GET (view), also require participant status
+            return is_participant
         
         # For other object types, deny by default
         return False

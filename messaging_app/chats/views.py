@@ -1,6 +1,7 @@
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import Conversation, Message, User
 from .serializers import (
@@ -25,7 +26,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
     """
     queryset = Conversation.objects.all()
     serializer_class = ConversationSerializer
-    permission_classes = [IsParticipantOfConversation]
+    permission_classes = [IsAuthenticated, IsParticipantOfConversation]
     pagination_class = ConversationPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = ConversationFilter
@@ -93,7 +94,7 @@ class MessageViewSet(viewsets.ModelViewSet):
     """
     queryset = Message.objects.all()
     serializer_class = MessageSerializer
-    permission_classes = [IsParticipantOfConversation]
+    permission_classes = [IsAuthenticated, IsParticipantOfConversation]
     pagination_class = MessagePagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = MessageFilter
@@ -105,13 +106,10 @@ class MessageViewSet(viewsets.ModelViewSet):
         """Filter messages by conversation if provided via nested route or query param.
         Only show messages from conversations where the user is a participant.
         """
-        queryset = Message.objects.select_related('sender', 'conversation')
-        
-        # Only show messages from conversations where the authenticated user is a participant
-        if self.request.user and self.request.user.is_authenticated:
-            queryset = queryset.filter(
-                conversation__participants__user_id=self.request.user.user_id
-            ).distinct()
+        # Use Message.objects.filter to ensure only participants can view messages
+        queryset = Message.objects.filter(
+            conversation__participants__user_id=self.request.user.user_id
+        ).select_related('sender', 'conversation').distinct()
         
         # Handle nested route: conversations/{id}/messages/
         conversation_pk = self.kwargs.get('conversation_pk', None)
