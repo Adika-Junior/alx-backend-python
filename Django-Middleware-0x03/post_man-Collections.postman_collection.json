@@ -1,0 +1,622 @@
+{
+	"info": {
+		"_postman_id": "messaging-app-auth-permissions",
+		"name": "Messaging App - Authentication & Permissions",
+		"description": "Postman collection for testing authentication (JWT), permissions, pagination, and filtering in the messaging app",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Obtain JWT Token (Login)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    pm.environment.set(\"access_token\", jsonData.access);",
+									"    pm.environment.set(\"refresh_token\", jsonData.refresh);",
+									"    console.log(\"Access token saved:\", jsonData.access);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"user@example.com\",\n    \"password\": \"your_password_here\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/token/",
+							"host": ["{{base_url}}"],
+							"path": ["api", "token", ""]
+						},
+						"description": "Login and obtain JWT access and refresh tokens. Update email and password in the request body."
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh JWT Token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"refresh\": \"{{refresh_token}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/token/refresh/",
+							"host": ["{{base_url}}"],
+							"path": ["api", "token", "refresh", ""]
+						},
+						"description": "Refresh the access token using the refresh token."
+					},
+					"response": []
+				},
+				{
+					"name": "Verify JWT Token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"token\": \"{{access_token}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/token/verify/",
+							"host": ["{{base_url}}"],
+							"path": ["api", "token", "verify", ""]
+						},
+						"description": "Verify if the access token is valid."
+					},
+					"response": []
+				}
+			],
+			"description": "JWT authentication endpoints"
+		},
+		{
+			"name": "Conversations",
+			"item": [
+				{
+					"name": "List Conversations",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/conversations/?page=1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "conversations", ""],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								}
+							]
+						},
+						"description": "Get all conversations where the authenticated user is a participant. Requires authentication."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Conversation",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"participant_ids\": [\n        \"user_uuid_1\",\n        \"user_uuid_2\"\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/conversations/",
+							"host": ["{{base_url}}"],
+							"path": ["api", "conversations", ""]
+						},
+						"description": "Create a new conversation with participants. Update participant_ids with actual user UUIDs."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Conversation Detail",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/conversations/:conversation_id/",
+							"host": ["{{base_url}}"],
+							"path": ["api", "conversations", ":conversation_id", ""],
+							"variable": [
+								{
+									"key": "conversation_id",
+									"value": "conversation_uuid_here"
+								}
+							]
+						},
+						"description": "Get a specific conversation with all messages. Only accessible if user is a participant."
+					},
+					"response": []
+				},
+				{
+					"name": "Filter Conversations by Participant",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/conversations/?participant=user_uuid_here&participant_email=user@example.com",
+							"host": ["{{base_url}}"],
+							"path": ["api", "conversations", ""],
+							"query": [
+								{
+									"key": "participant",
+									"value": "user_uuid_here"
+								},
+								{
+									"key": "participant_email",
+									"value": "user@example.com"
+								}
+							]
+						},
+						"description": "Filter conversations by participant user ID or email."
+					},
+					"response": []
+				},
+				{
+					"name": "Test Unauthorized Access",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/conversations/",
+							"host": ["{{base_url}}"],
+							"path": ["api", "conversations", ""]
+						},
+						"description": "Test that unauthorized users cannot access conversations (should return 401)."
+					},
+					"response": []
+				}
+			],
+			"description": "Conversation management endpoints"
+		},
+		{
+			"name": "Messages",
+			"item": [
+				{
+					"name": "List Messages (Paginated)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/messages/?page=1&page_size=20",
+							"host": ["{{base_url}}"],
+							"path": ["api", "messages", ""],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "20"
+								}
+							]
+						},
+						"description": "Get all messages with pagination (20 per page). Only shows messages from conversations where user is a participant."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Message",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"conversation\": \"conversation_uuid_here\",\n    \"message_body\": \"Hello, this is a test message!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/messages/",
+							"host": ["{{base_url}}"],
+							"path": ["api", "messages", ""]
+						},
+						"description": "Send a new message to a conversation. Conversation ID is required. Sender is automatically set from the authenticated user."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Message (Nested Route)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"message_body\": \"Hello, this is a test message!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/conversations/:conversation_id/messages/",
+							"host": ["{{base_url}}"],
+							"path": ["api", "conversations", ":conversation_id", "messages", ""],
+							"variable": [
+								{
+									"key": "conversation_id",
+									"value": "conversation_uuid_here"
+								}
+							]
+						},
+						"description": "Send a message using nested route (conversation ID in URL)."
+					},
+					"response": []
+				},
+				{
+					"name": "Filter Messages by Conversation",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/messages/?conversation=conversation_uuid_here",
+							"host": ["{{base_url}}"],
+							"path": ["api", "messages", ""],
+							"query": [
+								{
+									"key": "conversation",
+									"value": "conversation_uuid_here"
+								}
+							]
+						},
+						"description": "Filter messages by conversation ID."
+					},
+					"response": []
+				},
+				{
+					"name": "Filter Messages by Sender",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/messages/?sender=sender_uuid_here&sender_email=sender@example.com",
+							"host": ["{{base_url}}"],
+							"path": ["api", "messages", ""],
+							"query": [
+								{
+									"key": "sender",
+									"value": "sender_uuid_here"
+								},
+								{
+									"key": "sender_email",
+									"value": "sender@example.com"
+								}
+							]
+						},
+						"description": "Filter messages by sender user ID or email."
+					},
+					"response": []
+				},
+				{
+					"name": "Filter Messages by Date Range",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/messages/?sent_at_after=2024-01-01T00:00:00Z&sent_at_before=2024-12-31T23:59:59Z",
+							"host": ["{{base_url}}"],
+							"path": ["api", "messages", ""],
+							"query": [
+								{
+									"key": "sent_at_after",
+									"value": "2024-01-01T00:00:00Z"
+								},
+								{
+									"key": "sent_at_before",
+									"value": "2024-12-31T23:59:59Z"
+								}
+							]
+						},
+						"description": "Filter messages within a specific time range."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Message Detail",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/messages/:message_id/",
+							"host": ["{{base_url}}"],
+							"path": ["api", "messages", ":message_id", ""],
+							"variable": [
+								{
+									"key": "message_id",
+									"value": "message_uuid_here"
+								}
+							]
+						},
+						"description": "Get a specific message. Only accessible if user is a participant in the message's conversation."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Message",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"message_body\": \"Updated message content\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/messages/:message_id/",
+							"host": ["{{base_url}}"],
+							"path": ["api", "messages", ":message_id", ""],
+							"variable": [
+								{
+									"key": "message_id",
+									"value": "message_uuid_here"
+								}
+							]
+						},
+						"description": "Update a message. Only allowed if user is a participant in the message's conversation."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Message",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/messages/:message_id/",
+							"host": ["{{base_url}}"],
+							"path": ["api", "messages", ":message_id", ""],
+							"variable": [
+								{
+									"key": "message_id",
+									"value": "message_uuid_here"
+								}
+							]
+						},
+						"description": "Delete a message. Only allowed if user is a participant in the message's conversation."
+					},
+					"response": []
+				},
+				{
+					"name": "Test Unauthorized Message Access",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/messages/",
+							"host": ["{{base_url}}"],
+							"path": ["api", "messages", ""]
+						},
+						"description": "Test that unauthorized users cannot access messages (should return 401)."
+					},
+					"response": []
+				},
+				{
+					"name": "Test Non-Participant Access",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"conversation\": \"conversation_uuid_where_user_is_not_participant\",\n    \"message_body\": \"Trying to send message to conversation I'm not part of\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/messages/",
+							"host": ["{{base_url}}"],
+							"path": ["api", "messages", ""]
+						},
+						"description": "Test that users cannot send messages to conversations they're not part of (should return 403)."
+					},
+					"response": []
+				}
+			],
+			"description": "Message management endpoints with pagination and filtering"
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		},
+		{
+			"key": "access_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "refresh_token",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
+
