@@ -1,0 +1,84 @@
+#!/bin/bash
+
+# Script to apply rolling update and monitor progress
+
+set -e
+
+DEPLOYMENT_NAME="messaging-app-blue"
+SERVICE_NAME="messaging-app-service"
+TEST_URL="http://localhost:8000"
+
+echo "Applying updated deployment file (version 2.0)..."
+kubectl apply -f blue_deployment.yaml
+
+echo ""
+echo "Triggering rolling update..."
+kubectl rollout restart deployment/$DEPLOYMENT_NAME
+
+echo ""
+echo "Monitoring rollout status..."
+kubectl rollout status deployment/$DEPLOYMENT_NAME --timeout=300s
+
+echo ""
+echo "Setting up port forwarding for continuous testing..."
+kubectl port-forward service/$SERVICE_NAME 8000:8000 &
+PORT_FORWARD_PID=$!
+
+# Wait for port forward to be ready
+sleep 5
+
+echo ""
+echo "Starting continuous curl requests to test for downtime..."
+echo "Sending requests every 2 seconds for 60 seconds..."
+
+SUCCESS_COUNT=0
+FAIL_COUNT=0
+TOTAL_REQUESTS=0
+
+for i in {1..30}; do
+    if curl -s -f -o /dev/null -w "%{http_code}" $TEST_URL > /dev/null 2>&1; then
+        SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+        echo -n "."
+    else
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+        echo -n "F"
+    fi
+    TOTAL_REQUESTS=$((TOTAL_REQUESTS + 1))
+    sleep 2
+done
+
+echo ""
+echo ""
+echo "Test Results:"
+echo "Total requests: $TOTAL_REQUESTS"
+echo "Successful requests: $SUCCESS_COUNT"
+echo "Failed requests: $FAIL_COUNT"
+
+if [ $FAIL_COUNT -eq 0 ]; then
+    echo "✓ No downtime detected during rolling update!"
+else
+    echo "⚠ Some requests failed during the update"
+fi
+
+# Clean up port forward
+kill $PORT_FORWARD_PID 2>/dev/null || true
+
+echo ""
+echo "Verifying rolling update is complete..."
+kubectl get pods -l app=messaging-app,version=blue
+
+echo ""
+echo "Checking deployment status..."
+kubectl get deployment $DEPLOYMENT_NAME
+
+echo ""
+echo "Getting rollout history..."
+kubectl rollout history deployment/$DEPLOYMENT_NAME
+
+echo ""
+echo "Current pod details..."
+kubectl get pods -l app=messaging-app,version=blue -o wide
+
+echo ""
+echo "Rolling update verification complete!"
+

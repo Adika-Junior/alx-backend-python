@@ -1,0 +1,66 @@
+#!/bin/bash
+
+# Script for blue-green deployment: deploy both versions and check for errors
+
+set -e
+
+BLUE_DEPLOYMENT="messaging-app-blue"
+GREEN_DEPLOYMENT="messaging-app-green"
+
+echo "Deploying blue version..."
+kubectl apply -f blue_deployment.yaml
+
+echo ""
+echo "Waiting for blue deployment to be ready..."
+kubectl wait --for=condition=available deployment/$BLUE_DEPLOYMENT --timeout=120s || true
+
+echo ""
+echo "Deploying green version..."
+kubectl apply -f green_deployment.yaml
+
+echo ""
+echo "Waiting for green deployment to be ready..."
+kubectl wait --for=condition=available deployment/$GREEN_DEPLOYMENT --timeout=120s || true
+
+echo ""
+echo "Applying service configuration..."
+kubectl apply -f kubeservice.yaml
+
+echo ""
+echo "Checking blue deployment pods..."
+kubectl get pods -l version=blue
+
+echo ""
+echo "Checking green deployment pods..."
+kubectl get pods -l version=green
+
+echo ""
+echo "Checking for errors in blue deployment..."
+BLUE_PODS=$(kubectl get pods -l version=blue -o jsonpath='{.items[*].metadata.name}')
+for pod in $BLUE_PODS; do
+    echo "--- Logs for blue pod: $pod ---"
+    kubectl logs $pod --tail=50 || echo "Could not retrieve logs for $pod"
+    echo ""
+done
+
+echo ""
+echo "Checking for errors in green deployment..."
+GREEN_PODS=$(kubectl get pods -l version=green -o jsonpath='{.items[*].metadata.name}')
+for pod in $GREEN_PODS; do
+    echo "--- Logs for green pod: $pod ---"
+    kubectl logs $pod --tail=50 || echo "Could not retrieve logs for $pod"
+    echo ""
+done
+
+echo ""
+echo "Checking pod status..."
+kubectl get pods -l app=messaging-app
+
+echo ""
+echo "Checking for any errors in pod events..."
+kubectl get events --sort-by='.lastTimestamp' | grep -i error || echo "No errors found in recent events"
+
+echo ""
+echo "Blue-green deployment completed!"
+echo "To switch traffic from blue to green, update kubeservice.yaml selector to version: green"
+

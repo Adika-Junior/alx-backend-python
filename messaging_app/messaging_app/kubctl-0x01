@@ -1,0 +1,65 @@
+#!/bin/bash
+
+# Script to scale Django app, verify pods, perform load testing, and monitor resources
+
+set -e
+
+DEPLOYMENT_NAME="messaging-app-deployment"
+SERVICE_NAME="messaging-app-service"
+REPLICAS=3
+
+echo "Scaling deployment to $REPLICAS replicas..."
+kubectl scale deployment $DEPLOYMENT_NAME --replicas=$REPLICAS
+
+echo ""
+echo "Waiting for pods to be ready..."
+kubectl wait --for=condition=ready pod -l app=messaging-app --timeout=120s
+
+echo ""
+echo "Verifying multiple pods are running..."
+kubectl get pods -l app=messaging-app
+
+echo ""
+echo "Getting pod details..."
+kubectl get pods -l app=messaging-app -o wide
+
+# Get service IP for load testing
+SERVICE_IP=$(kubectl get service $SERVICE_NAME -o jsonpath='{.spec.clusterIP}')
+echo ""
+echo "Service ClusterIP: $SERVICE_IP"
+
+# Port forward to access the service locally for load testing
+echo ""
+echo "Setting up port forwarding for load testing..."
+kubectl port-forward service/$SERVICE_NAME 8000:8000 &
+PORT_FORWARD_PID=$!
+
+# Wait for port forward to be ready
+sleep 5
+
+# Check if wrk is installed
+if command -v wrk &> /dev/null; then
+    echo ""
+    echo "Performing load testing with wrk..."
+    echo "Testing endpoint: http://localhost:8000"
+    wrk -t4 -c100 -d30s http://localhost:8000/ || echo "Load test completed (may have errors if app is not fully ready)"
+else
+    echo ""
+    echo "Warning: wrk is not installed. Skipping load test."
+    echo "Install wrk with: sudo apt-get install wrk (Ubuntu/Debian) or brew install wrk (macOS)"
+fi
+
+echo ""
+echo "Monitoring resource usage..."
+kubectl top pods -l app=messaging-app || echo "Metrics server may not be installed. Install with: minikube addons enable metrics-server"
+
+echo ""
+echo "Getting resource usage details..."
+kubectl get pods -l app=messaging-app -o json | jq -r '.items[] | "\(.metadata.name): CPU=\(.spec.containers[0].resources.requests.cpu // "N/A"), Memory=\(.spec.containers[0].resources.requests.memory // "N/A")"' || kubectl describe pods -l app=messaging-app | grep -A 5 "Limits\|Requests"
+
+# Clean up port forward
+kill $PORT_FORWARD_PID 2>/dev/null || true
+
+echo ""
+echo "Script completed successfully!"
+
