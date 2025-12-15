@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-temporary-key-change-in-production'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']  # For PythonAnywhere deployment
 
 
 # Application definition

@@ -1,0 +1,92 @@
+name: CI - Tests, Lint, Coverage
+
+on:
+  push:
+    paths:
+      - 'messaging_app/**'
+  pull_request:
+    paths:
+      - 'messaging_app/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: messaging_app
+          MYSQL_USER: messaging_user
+          MYSQL_PASSWORD: messaging_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DJANGO_SETTINGS_MODULE: messaging_app.settings
+      MYSQL_DB: messaging_app
+      MYSQL_DATABASE: messaging_app
+      MYSQL_USER: messaging_user
+      MYSQL_PASSWORD: messaging_password
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: 3306
+      PYTHONWARNINGS: default
+
+    defaults:
+      run:
+        working-directory: messaging_app
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Wait for MySQL to be ready
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mysql-client
+          for i in {1..30}; do
+            if mysql -h 127.0.0.1 -P 3306 -u root -proot -e "SELECT 1;" >/dev/null 2>&1; then
+              echo "MySQL is up!"
+              break
+            fi
+            echo "Waiting for MySQL ($i/30)..."
+            sleep 2
+          done
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-django flake8 coverage
+
+      - name: Run migrations
+        run: |
+          python manage.py migrate --noinput
+
+      - name: Run tests with coverage
+        run: |
+          coverage run -m pytest --ds=messaging_app.settings
+          coverage xml -o coverage.xml
+
+      - name: flake8 Lint
+        run: |
+          flake8 .
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: messaging_app/coverage.xml
+
+
