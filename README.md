@@ -20,6 +20,9 @@ alx-backend-python/
 └── venv/                                 # Virtual environment (gitignored)
 ```
 
+The repository is hosted at:  
+**GitHub**: [Adika-Junior/alx-backend-python](https://github.com/Adika-Junior/alx-backend-python)
+
 ## Projects
 
 ### 1. Python Generators (python-generators-0x00)
@@ -85,6 +88,115 @@ alx-backend-python/
 - Conversation management
 - Message handling
 - RESTful API design
+
+#### Messaging App – Development & Production Setup
+
+- **Development (local)**:
+  - From the repository root:
+    ```bash
+    cd messaging_app
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install -r requirements.txt
+    ```
+  - Start a MySQL instance (recommended: use the provided `docker-compose.yml`):
+    ```bash
+    cd messaging_app
+    docker-compose up -d
+    ```
+  - Apply migrations and run the development server:
+    ```bash
+    python manage.py migrate
+    python manage.py runserver 0.0.0.0:8000
+    ```
+
+- **Environment configuration (dev & prod)**:
+  - `messaging_app/messaging_app/settings.py` is environment‑aware:
+    - **`DJANGO_SECRET_KEY`**: secret key for production.
+    - **`DJANGO_DEBUG`**: `"True"`/`"False"` to control debug mode.
+    - **`DJANGO_ALLOWED_HOSTS`**: comma‑separated list of allowed hosts (e.g. `example.com,api.example.com`).
+    - **Database** (MySQL) uses:
+      - `MYSQL_DB` / `MYSQL_DATABASE`
+      - `MYSQL_USER`
+      - `MYSQL_PASSWORD`
+      - `MYSQL_HOST`
+      - `MYSQL_PORT`
+  - In development, `DJANGO_DEBUG` defaults to `True` and `ALLOWED_HOSTS` is relaxed; in production, set `DJANGO_DEBUG=False` and configure `DJANGO_ALLOWED_HOSTS` explicitly.
+
+- **Production (Docker image)**:
+  - The app ships with a `Dockerfile` in `messaging_app/` that:
+    - Uses `python:3.10-slim`.
+    - Installs dependencies from `requirements.txt`.
+    - Copies the project and exposes port `8000`.
+  - A production container can be run with the appropriate environment variables:
+    ```bash
+    docker run -d --name messaging_app \
+      -p 8000:8000 \
+      -e DJANGO_SECRET_KEY=your-production-secret \
+      -e DJANGO_DEBUG=False \
+      -e DJANGO_ALLOWED_HOSTS=your-domain.com \
+      -e MYSQL_DB=messaging_app \
+      -e MYSQL_USER=messaging_user \
+      -e MYSQL_PASSWORD=messaging_password \
+      -e MYSQL_HOST=db-host \
+      -e MYSQL_PORT=3306 \
+      your-dockerhub-username/messaging_app:latest
+    ```
+
+#### CI/CD for Messaging App
+
+- **Jenkins Pipeline (CI + Docker image build)**:
+  - Jenkins is expected to run in Docker, for example:
+    ```bash
+    docker run -d --name jenkins \
+      -p 8080:8080 -p 50000:50000 \
+      -v jenkins_home:/var/jenkins_home \
+      jenkins/jenkins:lts
+    ```
+  - The pipeline definition lives in `messaging_app/Jenkinsfile` and:
+    - Checks out this repository from GitHub: [Adika-Junior/alx-backend-python](https://github.com/Adika-Junior/alx-backend-python).
+    - Sets up a Python virtual environment in `messaging_app/`.
+    - Installs dependencies plus `pytest` and `pytest-django`.
+    - Runs tests with `pytest` and publishes a JUnit XML test report in Jenkins.
+    - Builds a Docker image from `messaging_app/Dockerfile`.
+    - Pushes the Docker image to Docker Hub using Jenkins credentials.
+  - Jenkins requirements:
+    - Git, Pipeline, and ShiningPanda plugins.
+    - Credentials:
+      - GitHub credentials (ID: `github-credentials-id`) to access the repo.
+      - Docker Hub credentials (ID: `dockerhub-credentials-id`) to push images.
+    - The `DOCKER_IMAGE` environment in the `Jenkinsfile` should be set to your Docker Hub repository name (e.g. `your-dockerhub-username/messaging_app`).
+
+- **GitHub Actions – Testing, Linting, Coverage**:
+  - Workflow file: `messaging_app/.github/workflows/ci.yml`.
+  - Triggers:
+    - On `push` and `pull_request` affecting `messaging_app/**`.
+  - Job behavior:
+    - Spins up a MySQL 8.0 service configured to match the Django MySQL settings.
+    - Uses `actions/setup-python` (Python 3.10).
+    - Installs project dependencies plus `pytest`, `pytest-django`, `flake8`, and `coverage`.
+    - Runs migrations with `python manage.py migrate`.
+    - Executes tests with coverage using `coverage run -m pytest`.
+    - Generates `coverage.xml` and uploads it as a build artifact.
+    - Runs `flake8 .` to enforce PEP 8; any linting errors fail the build.
+
+- **GitHub Actions – Docker Image Build & Push**:
+  - Workflow file: `messaging_app/.github/workflows/dep.yml`.
+  - Trigger:
+    - On `push` to `main` that touches `messaging_app/**`.
+  - Job behavior:
+    - Uses `docker/setup-qemu-action` and `docker/setup-buildx-action` to enable multi‑platform builds.
+    - Logs in to Docker Hub using repository secrets:
+      - `DOCKERHUB_USERNAME`
+      - `DOCKERHUB_TOKEN`
+    - Uses `docker/build-push-action` to build and push:
+      - `${DOCKERHUB_USERNAME}/messaging_app:latest`
+      - `${DOCKERHUB_USERNAME}/messaging_app:${{ github.sha }}`
+
+This CI/CD setup ensures the messaging app has:
+- **Development**: Local `venv` or `docker-compose` with MySQL, debug‑friendly configuration.
+- **Production**: Docker image build and push via Jenkins and GitHub Actions, with environment‑driven settings for security and scalability.
+
 
 ## Technology Stack
 
@@ -169,7 +281,7 @@ The projects are designed to be completed in sequence, building upon previous co
 
 1. **Clone the repository**:
 ```bash
-git clone <repository-url>
+git clone https://github.com/Adika-Junior/alx-backend-python.git
 cd alx-backend-python
 ```
 

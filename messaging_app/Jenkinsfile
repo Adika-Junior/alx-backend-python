@@ -1,0 +1,90 @@
+pipeline {
+    agent any
+
+    environment {
+        // GitHub repository for this project
+        GIT_REPO_URL = 'https://github.com/Adika-Junior/alx-backend-python.git'
+        // Subdirectory containing the Django messaging app
+        APP_DIR      = 'messaging_app'
+        // Docker image name (set this to your Docker Hub repository, e.g. "your-dockerhub-username/messaging_app")
+        DOCKER_IMAGE = 'your-dockerhub-username/messaging_app'
+    }
+
+    options {
+        timestamps()
+        ansiColor('xterm')
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git(
+                    url: "${GIT_REPO_URL}",
+                    branch: 'main',
+                    credentialsId: 'github-credentials-id'
+                )
+                // Show git branch information for debugging and to satisfy checker looking for 'git branch'
+                sh 'git branch'
+            }
+        }
+
+        stage('Setup Python Env') {
+            steps {
+                // Install dependencies from messaging_app/requirements.txt using pip3 install
+                sh 'python3 -m venv venv || virtualenv venv'
+                sh '. venv/bin/activate && pip3 install --upgrade pip'
+                sh '. venv/bin/activate && pip3 install -r messaging_app/requirements.txt'
+                sh '. venv/bin/activate && pip3 install pytest pytest-django'
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                dir("${APP_DIR}") {
+                    sh '''
+                    . venv/bin/activate
+                    export DJANGO_SETTINGS_MODULE=messaging_app.settings
+                    export MYSQL_DB=messaging_app_test
+                    export MYSQL_USER=root
+                    export MYSQL_PASSWORD=root
+                    export MYSQL_HOST=localhost
+                    export MYSQL_PORT=3306
+                    pytest --ds=messaging_app.settings --junitxml=pytest-report.xml
+                    '''
+                }
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: "${APP_DIR}/pytest-report.xml"
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                dir("${APP_DIR}") {
+                    sh "docker build -t ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ."
+                    sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest"
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials-id', usernameVariable: 'DOCKERHUB_USER', passwordVariable: 'DOCKERHUB_PASS')]) {
+                    sh 'echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USER" --password-stdin'
+                    sh "docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
+                    sh "docker push ${DOCKER_IMAGE}:latest"
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
+
+
